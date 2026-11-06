@@ -109,7 +109,6 @@ struct JNIEnv {};
 #include "Core/HLE/sceUsbGps.h"
 #include "Common/CPUDetect.h"
 #include "UI/GameInfoCache.h"
-#include "UI/Theme.h"
 
 #include "app-android.h"
 
@@ -991,7 +990,7 @@ extern "C" void Java_org_ppsspp_ppsspp_NativeApp_saveStateForBackground(JNIEnv *
 	});
 
 	std::unique_lock<std::mutex> lock(*mutex);
-	bool completed = cv->wait_for(lock, std::chrono::milliseconds(500), [&done]() {
+	bool completed = cv->wait_for(lock, std::chrono::milliseconds(300), [&done]() {
 		return done->load();
 	});
 
@@ -1003,18 +1002,14 @@ extern "C" void Java_org_ppsspp_ppsspp_NativeApp_saveStateForBackground(JNIEnv *
 }
 
 // GMP Gameport: chamado do lado Java sempre que a conta ativa muda (login,
-// troca de perfil) para que o apelido de rede/AdHoc (g_Config.sNickName) e o
-// nome de usuário de infraestrutura (g_Config.sInfrastructureUsername)
-// fiquem sincronizados com o ID da conta GMP -- em vez do usuário poder
-// digitar/trocar isso manualmente em Configurações > Sistema (o campo lá é
-// só leitura agora, ver GameSettingsScreen.cpp). Desde a correção do bug de
-// "mostra o e-mail em vez do nome", o valor recebido aqui é
-// LocalAccount.playerId() (um ID curto derivado do UUID real da conta no
-// Supabase), não mais o nome de exibição digitado pelo usuário -- assim
-// nunca personalizável e nunca colide entre contas. Usa exatamente a mesma
-// sanitização (SanitizeString com AlphaNumDashUnderscore, 3-16 caracteres)
-// que a tela de Configurações já aplicava no nickname, para o resultado ser
-// sempre válido para AdHoc/infraestrutura.
+// troca de perfil, nome atualizado) para que o apelido de rede/AdHoc
+// (g_Config.sNickName) e o nome de usuário de infraestrutura
+// (g_Config.sInfrastructureUsername) fiquem sincronizados com o nome da
+// conta GMP -- em vez do usuário ter que digitar manualmente em
+// Configurações > Rede, como o PPSSPP original exige. Usa exatamente a
+// mesma sanitização (SanitizeString com AlphaNumDashUnderscore, 3-16
+// caracteres) que a tela de Configurações já aplica no nickname, para o
+// nome resultante ser sempre válido para AdHoc/infraestrutura.
 extern "C" void Java_org_ppsspp_ppsspp_NativeApp_syncNicknameFromAccount(JNIEnv *env, jclass, jstring jaccountName) {
 	std::string accountName = GetJavaString(env, jaccountName);
 	std::string sanitized = SanitizeString(accountName, StringRestriction::AlphaNumDashUnderscore, 3, 16);
@@ -1026,26 +1021,6 @@ extern "C" void Java_org_ppsspp_ppsspp_NativeApp_syncNicknameFromAccount(JNIEnv 
 	}
 	g_Config.sNickName = sanitized;
 	g_Config.sInfrastructureUsername = sanitized;
-}
-
-// GMP Gameport: chamado do lado Java quando o usuário escolhe um tema em
-// "Minha conta > Trocar tema" (ver AccountActivity.java). O campo "Tema"
-// dentro de Configurações > Sistema ficou travado de propósito (ver
-// GameSettingsScreen.cpp) -- esta é a única forma de troca que sobrou, e
-// passa por aqui em vez de direto por g_Config porque AccountActivity não
-// carrega a lib nativa (só PpssppActivity carrega), então a escolha é
-// salva num SharedPreferences e sincronizada por aqui assim que a lib
-// nativa estiver disponível (mesmo padrão de syncNicknameFromAccount acima).
-// Nome inválido/desconhecido não trava nada: UpdateTheme() já volta pro
-// tema "Default" sozinho se g_Config.sThemeName não bater com nenhum tema
-// carregado.
-extern "C" void Java_org_ppsspp_ppsspp_NativeApp_setThemeName(JNIEnv *env, jclass, jstring jThemeName) {
-	std::string themeName = GetJavaString(env, jThemeName);
-	if (themeName.empty()) {
-		return;
-	}
-	g_Config.sThemeName = themeName;
-	UpdateTheme();
 }
 
 extern "C" void Java_org_ppsspp_ppsspp_NativeApp_shutdown(JNIEnv *, jclass) {

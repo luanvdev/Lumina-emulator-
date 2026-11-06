@@ -2111,7 +2111,25 @@ void EmuScreen::AutoLoadSaveState() {
 // file's name (see Core/SaveState.cpp), so a negative slot number here is
 // safe -- it produces its own uniquely-named file, nothing more.
 
+// GMP Gameport: definido em Core/HLE/sceUtility.cpp (true enquanto um dialogo
+// do sistema do PSP -- salvar/carregar dados, mensagem, teclado -- esta aberto).
+extern bool currentDialogActive;
+
 void EmuScreen::AutoSaveOnBackground() {
+	// GMP Gameport (anti-ANR): este metodo roda sincronamente na thread de
+	// render enquanto a UI do Android espera em onPause(). Serializar o estado
+	// inteiro durante a tela de salvar do jogo (ou salvar de novo em seguida)
+	// segurava a UI por >5s e gerava "GMP Gameport nao esta respondendo".
+	// Nesses casos o autosave e pulado -- o proprio jogo esta gravando dados.
+	if (currentDialogActive) {
+		return;
+	}
+	static double lastBgSave = 0.0;
+	double nowT = time_now_d();
+	if (lastBgSave != 0.0 && nowT - lastBgSave < 20.0) {
+		return;
+	}
+	lastBgSave = nowT;
 	// GMP Gameport: respeita o toggle de Configurações (ligado por padrão).
 	if (!g_Config.bGMPBackgroundAutoSaveEnabled) {
 		return;
